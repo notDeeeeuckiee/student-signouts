@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Student Signout</title>
+  <link rel="icon" href="/favicon.png" type="image/png" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      background-color: #f0f8ff;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+    .footer {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .top-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+    }
+    #announcement {
+      display: none;
+      position: fixed;
+      top: 1rem;
+      left: 20%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      width: 80%;
+      max-width: 500px;
+      animation: fadeIn 0.5s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <a href="/admin" class="btn btn-outline-primary top-btn">Staff Login</a>
+
+  <div class="card">
+    <h2 class="text-primary">Student Signout</h2>
+    <form id="signoutForm" class="mt-3">
+      <input type="text" name="studentName" placeholder="Your Name" required class="form-control mb-2" />
+      <select name="class" required class="form-control mb-2">
+        <option value="">Select Class</option>
+        <option value="MATH">Math</option>
+        <option value="SS">Social Studies</option>
+        <option value="SCI">Science</option>
+        <option value="RDG">Reading</option>
+        <option value="LA">LA (ELA)</option>
+      </select>
+      <select name="homeroom" required class="form-control mb-2">
+        <option value="">Select Homeroom</option>
+        <option value="6-1">6-Pearl</option>
+        <option value="6-2">6-Lee</option>
+        <option value="6-3">6-Peirce</option>
+        <option value="6-4">6-???</option>
+        <option value="7-1">7-Warner</option>
+        <option value="7-2">7-Watts</option>
+        <option value="7-3">7-Metzger</option>
+        <option value="7-4">7-Munyon</option>
+        <option value="8-1">8-Riskie</option>
+        <option value="8-2">8-Gianaris</option>
+        <option value="8-3">8-Browne</option>
+        <option value="8-4">8-Weist</option>
+        <option value="8-5">8-Taylor</option>
+      </select>
+      <button type="submit" class="btn btn-primary">Submit Pass</button>
+    </form>
+  </div>
+
+  <div id="announcement" class="alert alert-info text-center">
+    <span id="announcementText"></span>
+    <button class="btn-close float-end" onclick="dismissAnnouncement()"></button>
+  </div>
+
+  <div class="footer">Version 1.0.0</div>
+
+  <audio id="notifySound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_7e2b2b7b7f.mp3?filename=notification-113412.mp3"></audio>
+
+  <script>
+    const socket = io();
+
+    document.getElementById('signoutForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = {
+        studentName: form.studentName.value,
+        class: form.class.value,
+        homeroom: form.homeroom.value
+      };
+      const res = await fetch('/signout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        showAnnouncement('Request sent!', 'success');
+        form.reset();
+      }
+    });
+
+    socket.on('notifyStudent', data => {
+      showAnnouncement(data.message, 'primary');
+      document.getElementById('notifySound').play();
+    });
+
+    function showAnnouncement(message, type = 'info') {
+      const box = document.getElementById('announcement');
+      const text = document.getElementById('announcementText');
+      box.className = `alert alert-${type} text-center`;
+      text.textContent = message;
+      box.style.display = 'block';
+    }
+
+    function dismissAnnouncement() {
+      document.getElementById('announcement').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
