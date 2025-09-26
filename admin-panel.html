@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Staff Login</title>
+  <link rel="icon" href="/favicon.png" type="image/png" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      background-color: #f0f8ff;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 600px;
+    }
+    .footer {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .error {
+      color: red;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .top-btn {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+    }
+    #announcement {
+      display: none;
+      position: fixed;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      width: 40%;
+      max-width: 500px;
+      animation: fadeIn 0.5s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .request-card {
+      animation: fadeIn 0.5s ease;
+    }
+  </style>
+</head>
+<body>
+  <a href="/student" class="btn btn-outline-primary top-btn">← Student Page</a>
+
+  <div class="card">
+    <h2 class="text-primary">Staff Login</h2>
+    <div id="loginSection">
+      <input type="text" id="username" placeholder="Username" class="form-control mb-2" />
+      <input type="password" id="password" placeholder="Password" class="form-control mb-2" />
+      <button class="btn btn-primary" onclick="login()">Login</button>
+      <div id="loginError" class="error" style="display:none;">Invalid username or password.</div>
+    </div>
+
+    <div id="dashboard" style="display:none;">
+      <h4>Student Requests</h4>
+      <select id="classFilter" class="form-select mb-2">
+        <option value="">All Classes</option>
+        <option value="MATH">Math</option>
+        <option value="SS">Social Studies</option>
+        <option value="SCI">Science</option>
+        <option value="RDG">Reading</option>
+        <option value="LA">LA (Ela)</option>
+      </select>
+      <ul id="requests" class="list-group mb-4"></ul>
+
+      <h4>Student Status</h4>
+      <ul id="statusList" class="list-group mb-3"></ul>
+
+      <div id="adminControls" style="display:none;">
+        
+        <h4 class="mt-4">Teacher Password Controls</h4>
+        <input type="text" id="targetTeacher" placeholder="Teacher Username" class="form-control mb-2" />
+        <input type="text" id="newTeacherPassword" placeholder="New Password" class="form-control mb-2" />
+        <button class="btn btn-secondary mb-3" onclick="setTeacherPassword()">Set Teacher Password</button>
+
+        <h4>Reset My Password</h4>
+        <input type="text" id="newOwnPassword" placeholder="New Password" class="form-control mb-2" />
+        <button class="btn btn-warning mb-3" onclick="resetOwnPassword()">Reset My Password</button>
+       
+        <h4 class="mt-4">Danger Zone</h4>
+        <button class="btn btn-danger mb-3" onclick="clearAllRequests()">Remove All Students</button>
+
+        <h4>View All Teachers</h4>
+<table class="table table-bordered" id="teacherTable">
+  <thead>
+    <tr>
+      <th>Username</th>
+      <th>Password</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<button class="btn btn-outline-dark" onclick="loadTeacherList()">Refresh List</button>
+      </div>
+    </div>
+
+    <div class="footer">Version 1.0.0</div>
+  </div>
+
+  <div id="announcement" class="alert alert-info text-center">
+    <span id="announcementText"></span>
+    <button class="btn-close float-end" onclick="dismissAnnouncement()"></button>
+  </div>
+
+  <audio id="notifySound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_7e2b2b7b7f.mp3?filename=notification-113412.mp3"></audio>
+
+  <script>
+    const socket = io();
+    let role = '';
+    let username = '';
+
+    socket.on('newRequest', data => {
+      if (!role) return;
+      const selectedClass = document.getElementById('classFilter').value;
+      if (selectedClass && selectedClass !== data.class) return;
+      displayRequest(data);
+      loadStatusList();
+      showAnnouncement(`${data.studentName} signed out from ${data.class}`, 'info');
+      document.getElementById('notifySound').play();
+    });
+
+    socket.on('notifyStudent', data => {
+      showAnnouncement(data.message, 'primary');
+      document.getElementById('notifySound').play();
+    });
+
+    async function login() {
+      username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const result = await res.json();
+      if (result.success) {
+        role = result.role;
+        username = result.username;
+        document.getElementById('loginSection').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('loginError').style.display = 'none';
+        if (role === 'admin') {
+          document.getElementById('adminControls').style.display = 'block';
+        }
+        loadRequests();
+        loadStatusList();
+        showAnnouncement(`Welcome, ${username}!`, 'success');
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+        showAnnouncement('Invalid login.', 'danger');
+      }
+    }
+
+    async function loadRequests() {
+      const selectedClass = document.getElementById('classFilter').value;
+      const res = await fetch('/requests');
+      const data = await res.json();
+      const list = document.getElementById('requests');
+      list.innerHTML = '';
+
+      const filtered = data.filter(r => !selectedClass || r.class === selectedClass);
+      if (filtered.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'list-group-item text-muted';
+        li.textContent = 'No requests for this class.';
+        list.appendChild(li);
+      } else {
+        filtered.forEach(displayRequest);
+      }
+    }
+
+    function displayRequest(data) {
+      const li = document.createElement('li');
+      li.className = 'list-group-item request-card';
+      li.innerHTML = `<strong>${data.studentName}</strong> — ${data.class} (${data.homeroom})<br><small>${new Date(data.timestamp || Date.now()).toLocaleTimeString()}</small>`;
+      document.getElementById('requests').appendChild(li);
+    }
+
+    function showAnnouncement(message, type = 'info') {
+      const box = document.getElementById('announcement');
+      const text = document.getElementById('announcementText');
+      box.className = `alert alert-${type} text-center`;
+      text.textContent = message;
+      box.style.display = 'block';
+    }
+
+    function dismissAnnouncement() {
+      document.getElementById('announcement').style.display = 'none';
+    }
+
+    async function setTeacherPassword() {
+      const username = document.getElementById('targetTeacher').value;
+      const newPassword = document.getElementById('newTeacherPassword').value;
+      if (!username || !newPassword) return showAnnouncement('Fill in both fields', 'warning');
+
+      await fetch('/set-teacher-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, newPassword })
+      });
+      showAnnouncement(`Password updated for ${username}`, 'success');
+    }
+
+    async function resetOwnPassword() {
+      const newPassword = document.getElementById('newOwnPassword').value;
+      if (!newPassword) return showAnnouncement('Enter a new password', 'warning');
+
+      await fetch('/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, newPassword })
+      });
+      showAnnouncement(`Your password has been updated`, 'success');
+    }
+
+async function loadTeacherList() {
+  const res = await fetch('/list-teachers');
+  const data = await res.json();
+  const tableBody = document.querySelector('#teacherTable tbody');
+  tableBody.innerHTML = '';
+
+  for (const [user, pass] of Object.entries(data)) {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${user}</td><td>${pass}</td>`;
+    tableBody.appendChild(row);
+  }
+}
+
+async function clearAllRequests() {
+  const confirmed = confirm("Are you sure you want to remove all student requests?");
+  if (!confirmed) return;
+
+  await fetch('/clear-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  showAnnouncement("All student requests have been cleared.", "danger");
+  loadRequests();
+  loadStatusList();
+}
+
+    document.getElementById('classFilter').addEventListener('change', loadRequests);
+  </script>
+</body>
+</html>
